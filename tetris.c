@@ -294,6 +294,12 @@ bool can_move(game_data *g, tile *free, int dcol, int drow) {
 }
 
 void drop_tiles(game_data *game, int row) {
+	for (int c = 0; c < game->field_cols; c++) {
+		if (game->field[row][c] != NULL) {
+			free(game->field[row][c]);
+		}
+	}
+
 	for (int r = row; r > 0; r--) {
 		for (int c = 0; c < game->field_cols; c++) {
 			tile *upper_tile = game->field[r-1][c];
@@ -303,8 +309,6 @@ void drop_tiles(game_data *game, int row) {
 				game->field[r][c]->col = c;
 				game->field[r][c]->row = r;
 			}
-
-			// TODO: call free()
 		}
 	}
 }
