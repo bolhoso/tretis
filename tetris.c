@@ -100,6 +100,8 @@ ALLEGRO_TIMER *timer;
 ALLEGRO_EVENT_QUEUE *queue;
 ALLEGRO_DISPLAY *disp;
 unsigned char key[ALLEGRO_KEY_MAX];
+
+ALLEGRO_COLOR COLORS[PC_N];
 //
 // =====
 
@@ -108,6 +110,16 @@ void must_init(bool test) {
 		return;
 
 	exit(1);
+}
+
+void init_piece_colors() {
+	COLORS[PC_Z]             = al_map_rgb(0x00, 0xe1, 0x42);
+	COLORS[PC_INV_Z]         = al_map_rgb(0x00, 0xe1, 0x42);
+	COLORS[PC_MIDDLE_FINGER] = al_map_rgb(0xbb, 0x00, 0xe0);
+	COLORS[PC_L]             = al_map_rgb(0x00, 0x84, 0xeb);
+	COLORS[PC_INV_L]         = al_map_rgb(0x00, 0x84, 0xeb);
+	COLORS[PC_SQUARE]        = al_map_rgb(0xf1, 0xde, 0x00);
+	COLORS[PC_LONG]          = al_map_rgb(0x00, 0xde, 0xf6);
 }
 
 void init_allegro() {
@@ -142,12 +154,14 @@ void init_allegro() {
 	al_register_event_source(queue, al_get_display_event_source(disp));
 	al_register_event_source(queue, al_get_keyboard_event_source());
 	memset(key, 0, sizeof(key));
+
+	init_piece_colors();
 }
 
 // TODO: just to refactor and reduce impact...
-tile *create_tile_ref(int row, int col) {
+tile *create_tile(int row, int col, ALLEGRO_COLOR color) {
 	tile *new = (tile *) malloc(sizeof (tile));
-	new->color = al_map_rgb_f(0.5, 0.5, 0.8);
+	new->color = color;
 	new->col = col;
 	new->row = row;
 	return new;
@@ -165,43 +179,43 @@ piece *pc_create(short type, int top_r, int top_c) {
 	// 123   321
 	case PC_INV_L:
 	case PC_L:
-		p->tiles[0] = create_tile_ref(top_r, top_c);
-		p->tiles[1] = create_tile_ref(top_r + 1, top_c);
-		p->tiles[2] = create_tile_ref(top_r + 1, top_c + inv * 1);
-		p->tiles[3] = create_tile_ref(top_r + 1, top_c + inv * 2);
+		p->tiles[0] = create_tile(top_r,     top_c,           COLORS[PC_L]);
+		p->tiles[1] = create_tile(top_r + 1, top_c,           COLORS[PC_L]);
+		p->tiles[2] = create_tile(top_r + 1, top_c + inv * 1, COLORS[PC_L]);
+		p->tiles[3] = create_tile(top_r + 1, top_c + inv * 2, COLORS[PC_L]);
 		break;
 
 	//  0
 	// 123
 	case PC_MIDDLE_FINGER:
-		p->tiles[0] = create_tile_ref(top_r, top_c);
-		p->tiles[1] = create_tile_ref(top_r + 1, top_c - 1);
-		p->tiles[2] = create_tile_ref(top_r + 1, top_c);
-		p->tiles[3] = create_tile_ref(top_r + 1, top_c + 1);
+		p->tiles[0] = create_tile(top_r,     top_c,     COLORS[PC_MIDDLE_FINGER]);
+		p->tiles[1] = create_tile(top_r + 1, top_c - 1, COLORS[PC_MIDDLE_FINGER]);
+		p->tiles[2] = create_tile(top_r + 1, top_c,     COLORS[PC_MIDDLE_FINGER]);
+		p->tiles[3] = create_tile(top_r + 1, top_c + 1, COLORS[PC_MIDDLE_FINGER]);
 		break;
 
 	//  01    10
     // 32      23
 	case PC_INV_Z:
 	case PC_Z:
-		p->tiles[0] = create_tile_ref(top_r, top_c);
-		p->tiles[1] = create_tile_ref(top_r, top_c + inv * 1);
-		p->tiles[2] = create_tile_ref(top_r + 1, top_c);
-		p->tiles[3] = create_tile_ref(top_r + 1, top_c - inv * 1);
+		p->tiles[0] = create_tile(top_r,     top_c,           COLORS[PC_Z]);
+		p->tiles[1] = create_tile(top_r,     top_c + inv * 1, COLORS[PC_Z]);
+		p->tiles[2] = create_tile(top_r + 1, top_c,           COLORS[PC_Z]);
+		p->tiles[3] = create_tile(top_r + 1, top_c - inv * 1, COLORS[PC_Z]);
 		break;
 
 	case PC_SQUARE:
-		p->tiles[0] = create_tile_ref(top_r, top_c);
-		p->tiles[1] = create_tile_ref(top_r, top_c + 1);
-		p->tiles[2] = create_tile_ref(top_r + 1, top_c);
-		p->tiles[3] = create_tile_ref(top_r + 1, top_c + 1);
+		p->tiles[0] = create_tile(top_r,     top_c,     COLORS[PC_SQUARE]);
+		p->tiles[1] = create_tile(top_r,     top_c + 1, COLORS[PC_SQUARE]);
+		p->tiles[2] = create_tile(top_r + 1, top_c,     COLORS[PC_SQUARE]);
+		p->tiles[3] = create_tile(top_r + 1, top_c + 1, COLORS[PC_SQUARE]);
 		break;
 
 	case PC_LONG:
-		p->tiles[0] = create_tile_ref(top_r, top_c);
-		p->tiles[1] = create_tile_ref(top_r + 1, top_c);
-		p->tiles[2] = create_tile_ref(top_r + 2, top_c);
-		p->tiles[3] = create_tile_ref(top_r + 3, top_c);
+		p->tiles[0] = create_tile(top_r,     top_c, COLORS[PC_LONG]);
+		p->tiles[1] = create_tile(top_r + 1, top_c, COLORS[PC_LONG]);
+		p->tiles[2] = create_tile(top_r + 2, top_c, COLORS[PC_LONG]);
+		p->tiles[3] = create_tile(top_r + 3, top_c, COLORS[PC_LONG]);
 		break;
 
 	default:
@@ -215,7 +229,6 @@ piece *pc_create(short type, int top_r, int top_c) {
 
 piece *pc_create_random() {
 	return pc_create(rand() % PC_N, 0, tile_center());
-//	return pc_create(PC_MIDDLE_FINGER, 0, tile_center());
 }
 
 
@@ -269,10 +282,6 @@ void init_objects(game_data *data) {
 
 	data->points = 0;
 	data->speed = INITIAL_SPEED;
-
-	// TODO: debug mode
-	data->field[FIELD_ROWS - 1][0] = create_tile_ref(FIELD_ROWS - 1, 0);
-	data->field[FIELD_ROWS - 1][FIELD_COLS-1] = create_tile_ref(FIELD_ROWS - 1, FIELD_COLS-1);
 }
 
 int to_scrx(int field_x) {
