@@ -22,7 +22,6 @@
 #define COLOR_BG      al_map_rgb_f(0, 0, 0)
 #define tile_center() (FIELD_COLS / 2)
 
-
 #define FPS 30
 #define GAME_TIMER_SPEED ((float)1/FPS)
 #define INITIAL_SPEED 1;
@@ -259,6 +258,7 @@ int pc_get_row(piece *p) {
 void pc_place(game_data *g) {
 	piece *p = g->falling;
 	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		// TODO: maybe allocating and copying piece's tiles to field
 		g->field[p->tiles[i]->row][p->tiles[i]->col] = p->tiles[i];
 	}
 }
@@ -356,7 +356,7 @@ bool pc_can_fall(game_data *g, piece *falling) {
 void drop_tiles(game_data *game, int row) {
 	for (int c = 0; c < game->field_cols; c++) {
 		if (game->field[row][c] != NULL) {
-			free(game->field[row][c]);
+			game->field[row][c] = NULL;
 		}
 	}
 
@@ -373,17 +373,26 @@ void drop_tiles(game_data *game, int row) {
 	}
 }
 
-bool disappear_line(game_data *game, int row) {
-	bool row_complete = true;
-	for (int i = 0; row_complete && i < game->field_cols; i++) {
-		row_complete = game->field[row][i] != NULL;
+// check all rows comprised by tiles from *placed
+// disappear any of the lines that have been completed and
+// drop the field content down
+bool disappear_line(game_data *game, piece *placed) {
+	bool line_removed = false;
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		int row = placed->tiles[i]->row;
+
+		bool row_complete = true;
+		for (int i = 0; row_complete && i < game->field_cols; i++) {
+			row_complete = game->field[row][i] != NULL;
+		}
+
+		if (row_complete) {
+			drop_tiles(game, row);
+			line_removed = true;
+		}
 	}
 
-	if (row_complete) {
-		drop_tiles(game, row);
-	}
-
-	return row_complete;
+	return line_removed;
 }
 
 bool game_logic(game_data *game) {
@@ -401,15 +410,13 @@ bool game_logic(game_data *game) {
 	}
 
 	if (process_piece_logic) {
-		int py = pc_get_row(game->falling);
-		
 		if (pc_can_fall(game, game->falling)) { // TODO: change to can_move_piece
 			pc_move_delta(game->falling, 1, 0);
 		} else {
 			pc_place(game);
+			disappear_line(game, game->falling);
 			game->falling = pc_create_random();
 
-			disappear_line(game, py);
 		}
 	}
 
