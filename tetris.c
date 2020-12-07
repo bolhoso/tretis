@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <string.h>
+#include <limits.h>
 
 #include <allegro5/allegro5.h>
 #include <allegro5/allegro_font.h>
@@ -82,7 +83,7 @@ typedef struct piece {
 
 typedef struct game_data {
 	tile *field[FIELD_ROWS][FIELD_COLS];
-	tile *falling;
+	piece *falling;
 
 	int field_cols, field_rows;
 
@@ -152,11 +153,7 @@ tile *create_tile_ref(int row, int col) {
 	return new;
 }
 
-tile *create_tile() {
-	return create_tile_ref(0, tile_center());
-}
-
-piece *create_piece(short type, int top_r, int top_c) {
+piece *pc_create(short type, int top_r, int top_c) {
 	piece *p = (piece *) malloc(sizeof(piece));
 	p->direction = D_NORTH;
 	p->type = type;
@@ -216,8 +213,48 @@ piece *create_piece(short type, int top_r, int top_c) {
 	return p;
 }
 
-piece *create_random_piece() {
-	return create_piece(rand() % PC_N, 0, tile_center());
+piece *pc_create_random() {
+	return pc_create(rand() % PC_N, 0, tile_center());
+//	return pc_create(PC_MIDDLE_FINGER, 0, tile_center());
+}
+
+
+// returns the leftmost tile col
+int pc_min_col(piece *p) {
+	int min = 99999;
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		min = p->tiles[i]->col < min ? p->tiles[i]->col : min;
+	}
+
+	return min;
+}
+
+// returns the rightmost tile col
+int pc_max_col(piece *p) {
+	int max = -999;
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		max = p->tiles[i]->col > max ? p->tiles[i]->col : max;
+	}
+
+	return max;
+}
+
+int pc_get_row(piece *p) {
+	return p->tiles[0]->row;
+}
+
+void pc_place(game_data *g) {
+	piece *p = g->falling;
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		g->field[p->tiles[i]->row][p->tiles[i]->col] = p->tiles[i];
+	}
+}
+
+void pc_move_delta(piece *p, int d_row, int d_col) {
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		p->tiles[i]->col += d_col;
+		p->tiles[i]->row += d_row;
+	}
 }
 
 void init_objects(game_data *data) {
@@ -228,10 +265,14 @@ void init_objects(game_data *data) {
 			data->field[i][j] = NULL;
 		}
 	}
-	data->falling = create_tile();
+	data->falling = pc_create_random();
 
 	data->points = 0;
 	data->speed = INITIAL_SPEED;
+
+	// TODO: debug mode
+	data->field[FIELD_ROWS - 1][0] = create_tile_ref(FIELD_ROWS - 1, 0);
+	data->field[FIELD_ROWS - 1][FIELD_COLS-1] = create_tile_ref(FIELD_ROWS - 1, FIELD_COLS-1);
 }
 
 int to_scrx(int field_x) {
@@ -273,24 +314,34 @@ void draw_field(game_data *g) {
 
 void draw_screen(game_data *g) {
 	al_clear_to_color(COLOR_BG);
-	al_draw_text(font, al_map_rgb_f(1, 1, 1), SCREEN_W / 2, 0, 0, "GAME!"); // TODO: how to center text?
+	al_draw_text(font, 	al_map_rgb_f(1, 1, 1), SCREEN_W / 2, 0, 0, "GAME!"); // TODO: how to center text?
 
 //	TODO: testing draw_piece(create_random_piece());
-	draw_tile(g->falling);
+	draw_piece(g->falling);
 	draw_field(g);
 
 	al_flip_display();
 }
 
-bool can_move(game_data *g, tile *free, int dcol, int drow) {
-	if (free == NULL)
+bool pc_can_move(game_data *g, piece *falling, int dcol, int drow) {
+	if (falling == NULL)
 		return false;
 
-	bool within_field = g->falling->row + drow < g->field_rows;
-//			g->falling->col + dcol > 0 && g->falling->col + dcol < g->field_cols;
-	bool free_below = within_field && g->field[free->row + drow][free->col + dcol] != NULL;
+	bool move_allowed = true;
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		tile *tile = falling->tiles[i];
 
-	return within_field && !free_below;
+		// place to go is free
+		move_allowed &= g->field[tile->row + drow][tile->col + dcol] == NULL;
+		move_allowed &= tile->col + dcol >= 0 && tile->col + dcol < g->field_cols;
+		move_allowed &= tile->row + drow >= 0;
+	}
+
+	return move_allowed;
+}
+
+bool pc_can_fall(game_data *g, piece *falling) {
+	return pc_can_move (g, falling, 0, 1);
 }
 
 void drop_tiles(game_data *game, int row) {
@@ -329,7 +380,6 @@ bool disappear_line(game_data *game, int row) {
 bool game_logic(game_data *game) {
 	if (game->falling == NULL) {
 		exit(1); // should never reach here :/
-		game->falling = create_tile();
 	}
 
 	// only move pieces every FPS ticks
@@ -342,14 +392,13 @@ bool game_logic(game_data *game) {
 	}
 
 	if (process_piece_logic) {
-		int px = game->falling->col;
-		int py = game->falling->row;
+		int py = pc_get_row(game->falling);
 		
-		if (can_move(game, game->falling, 0, 1)) {
-			game->falling->row++;
+		if (pc_can_fall(game, game->falling)) { // TODO: change to can_move_piece
+			pc_move_delta(game->falling, 1, 0);
 		} else {
-			game->field[py][px] = game->falling;
-			game->falling = create_tile();
+			pc_place(game);
+			game->falling = pc_create_random();
 
 			disappear_line(game, py);
 		}
@@ -365,19 +414,23 @@ bool process_kbd(game_data *game, bool *done) {
 
 	bool changed_state = false;
 	if (game->falling) {
-		if (key[ALLEGRO_KEY_DOWN] && can_move(game, game->falling, 0, 1)) {
+		if (key[ALLEGRO_KEY_DOWN] && pc_can_move(game, game->falling, 0, 1)) {
 			changed_state = true;
-			game->falling->row++;
+			pc_move_delta(game->falling, 1, 0);
 		}
 
-		if (key[ALLEGRO_KEY_LEFT] && game->falling->col > 0) {
+		if (key[ALLEGRO_KEY_LEFT] &&
+				pc_min_col(game->falling) > 0 &&
+				pc_can_move(game, game->falling, -1, 0)) {
 			changed_state = true;
-			game->falling->col--;
+			pc_move_delta(game->falling, 0, -1);
 		}
 
-		if (key[ALLEGRO_KEY_RIGHT] && game->falling->col + 1 < game->field_cols) {
+		if (key[ALLEGRO_KEY_RIGHT] &&
+				pc_max_col(game->falling) + 1 < game->field_cols &&
+				pc_can_move(game, game->falling, 1, 0)) {
 			changed_state = true;
-			game->falling->col++;
+			pc_move_delta(game->falling, 0, 1);
 		}
 	}
 
@@ -395,15 +448,6 @@ int main() {
 
 	init_allegro();
 	init_objects(&game_data);
-
-	// TODO: debug
-	for (int i = 0; i < game_data.field_cols - 1; i++) {
-		tile *p = create_tile();
-		p->row = game_data.field_rows - 1;
-		p->col = i;
-		game_data.field[game_data.field_rows - 1][i] = p;
-	}
-	// TODO: debug
 
 	bool done = false;
 	bool redraw = true;
