@@ -203,13 +203,19 @@ piece *pc_create(short type, int top_r, int top_c) {
 		p->tiles[3] = create_tile(top_r + 1, top_c - inv * 1, COLORS[PC_Z]);
 		break;
 
+	// 01
+	// 23
 	case PC_SQUARE:
-		p->tiles[0] = create_tile(top_r,     top_c,     COLORS[PC_SQUARE]);
-		p->tiles[1] = create_tile(top_r,     top_c + 1, COLORS[PC_SQUARE]);
-		p->tiles[2] = create_tile(top_r + 1, top_c,     COLORS[PC_SQUARE]);
-		p->tiles[3] = create_tile(top_r + 1, top_c + 1, COLORS[PC_SQUARE]);
+		p->tiles[3] = create_tile(top_r,     top_c,     COLORS[PC_SQUARE]);
+		p->tiles[0] = create_tile(top_r,     top_c + 1, COLORS[PC_SQUARE]);
+		p->tiles[1] = create_tile(top_r + 1, top_c,     COLORS[PC_SQUARE]);
+		p->tiles[2] = create_tile(top_r + 1, top_c + 1, COLORS[PC_SQUARE]);
 		break;
 
+	// 0
+	// 1
+	// 2
+	// 3
 	case PC_LONG:
 		p->tiles[0] = create_tile(top_r,     top_c, COLORS[PC_LONG]);
 		p->tiles[1] = create_tile(top_r + 1, top_c, COLORS[PC_LONG]);
@@ -230,6 +236,9 @@ piece *pc_create_random() {
 	return pc_create(rand() % PC_N, 0, tile_center());
 }
 
+bool pc_can_rotate(game_data *g, piece *p) {
+	return true; // TODO stub can rotate?
+}
 
 // returns the leftmost tile col
 int pc_min_col(piece *p) {
@@ -251,9 +260,16 @@ int pc_max_col(piece *p) {
 	return max;
 }
 
-int pc_get_row(piece *p) {
-	return p->tiles[0]->row;
+// returns the leftmost tile col
+int pc_min_row(piece *p) {
+	int min = 99999;
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		min = p->tiles[i]->row < min ? p->tiles[i]->row : min;
+	}
+
+	return min;
 }
+
 
 void pc_place(game_data *g) {
 	piece *p = g->falling;
@@ -325,7 +341,6 @@ void draw_screen(game_data *g) {
 	al_clear_to_color(COLOR_BG);
 	al_draw_text(font, 	al_map_rgb_f(1, 1, 1), SCREEN_W / 2, 0, 0, "GAME!"); // TODO: how to center text?
 
-//	TODO: testing draw_piece(create_random_piece());
 	draw_piece(g->falling);
 	draw_field(g);
 
@@ -347,6 +362,48 @@ bool pc_can_move(game_data *g, piece *falling, int dcol, int drow) {
 	}
 
 	return move_allowed;
+}
+
+void swap(int *a, int *b) {
+	int tmp = *a;
+	*a = *b;
+	*b = tmp;
+}
+
+void pc_rotate(piece *pc) {
+	if (pc == NULL || pc->type == PC_SQUARE)
+		return;
+
+	// Uses tile[2] as reference point, that's where the middle
+	// of each piece is
+	tile ref = *pc->tiles[2];
+
+	int row_offset = pc_min_row(pc);
+	int col_offset = pc_min_col(pc);
+	for (int i = 0; i < TILES_BY_PIECE; i++){
+		tile *t = pc->tiles[i];
+		t->row = t->row - row_offset;
+		t->col = t->col - col_offset;
+	}
+
+	// do the rotation by transposing...
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		swap(&(pc->tiles[i]->row), &(pc->tiles[i]->col));
+	}
+
+	// then inverting y
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		pc->tiles[i]->row = TILES_BY_PIECE - pc->tiles[i]->row;
+	}
+
+	// copy back from temp field back to piece
+	int ref_dcol = pc->tiles[2]->col + col_offset - ref.col;
+	int ref_drow = pc->tiles[2]->row + row_offset - ref.row;
+	for (int i = 0; i < TILES_BY_PIECE; i++){
+		tile *t = pc->tiles[i];
+		t->row = t->row + row_offset - ref_drow;
+		t->col = t->col + col_offset - ref_dcol;
+	}
 }
 
 bool pc_can_fall(game_data *g, piece *falling) {
@@ -410,6 +467,7 @@ bool game_logic(game_data *game) {
 	}
 
 	if (process_piece_logic) {
+		// TODO: debug
 		if (pc_can_fall(game, game->falling)) { // TODO: change to can_move_piece
 			pc_move_delta(game->falling, 1, 0);
 		} else {
@@ -433,6 +491,10 @@ bool process_kbd(game_data *game, bool *done) {
 		if (key[ALLEGRO_KEY_DOWN] && pc_can_move(game, game->falling, 0, 1)) {
 			changed_state = true;
 			pc_move_delta(game->falling, 1, 0);
+		}
+		if (key[ALLEGRO_KEY_UP] && pc_can_rotate(game, game->falling)) {
+			pc_rotate(game->falling);
+			changed_state = true;
 		}
 
 		if (key[ALLEGRO_KEY_LEFT] &&
@@ -510,4 +572,3 @@ int main() {
 
 	return 0;
 }
-
