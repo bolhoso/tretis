@@ -32,6 +32,8 @@
 
 #define TILES_BY_PIECE 4
 
+#define ABS(x) (x<0?-x:x)
+
 typedef struct object {
 	// this is discrete x,y in the field, not in the screen, relative to tile top
 	int col, row;
@@ -84,6 +86,7 @@ typedef struct piece {
 typedef struct game_data {
 	tile *field[FIELD_ROWS][FIELD_COLS];
 	piece *falling;
+	piece *next;
 
 	int field_cols, field_rows;
 
@@ -271,6 +274,16 @@ int pc_min_row(piece *p) {
 	return min;
 }
 
+int pc_max_row(piece *p) {
+	int max = -999;
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		max = p->tiles[i]->row > max ? p->tiles[i]->row : max;
+	}
+
+	return max;
+}
+
+
 
 void pc_place(game_data *g) {
 	piece *p = g->falling;
@@ -281,24 +294,38 @@ void pc_place(game_data *g) {
 }
 
 void pc_move_delta(piece *p, int d_row, int d_col) {
+	// TODO: can move?
+
 	for (int i = 0; i < TILES_BY_PIECE; i++) {
 		p->tiles[i]->col += d_col;
 		p->tiles[i]->row += d_row;
 	}
 }
 
-void init_objects(game_data *data) {
-	data->field_cols = FIELD_COLS;
-	data->field_rows = FIELD_ROWS;
-	for (int i = 0; i < data->field_rows; i++) {
-		for (int j = 0; j < data->field_cols; j++) {
-			data->field[i][j] = NULL;
+void grab_next_piece(game_data *g) {
+	if (!g->next) {
+		g->next = pc_create(rand() % PC_N, 0, 0);
+	}
+
+	g->falling = g->next;
+	pc_move_delta(g->falling, 0, FIELD_COLS / 2);
+	g->next = pc_create(rand() % PC_N, 0, 0);
+}
+
+void init_objects(game_data *g) {
+	g->field_cols = FIELD_COLS;
+	g->field_rows = FIELD_ROWS;
+	for (int i = 0; i < g->field_rows; i++) {
+		for (int j = 0; j < g->field_cols; j++) {
+			g->field[i][j] = NULL;
 		}
 	}
-	data->falling = pc_create_random();
 
-	data->points = 0;
-	data->speed = INITIAL_SPEED;
+	g->next = g->falling = NULL;
+	grab_next_piece(g);
+
+	g->points = 0;
+	g->speed = INITIAL_SPEED;
 }
 
 // calculate field offset
@@ -311,7 +338,7 @@ int toy(int y) {
 //
 
 // conver piece row into coordinate relative to the field top
-int row2x(int field_col) {
+int col2x(int field_col) {
 	return field_x(field_col * TILE_SIZE_PX);
 }
 
@@ -320,14 +347,25 @@ int row2y(int field_row) {
 }
 //
 
+void draw_tilexy(tile *p, int x, int y) {
+	int pad = TILE_PADDING;
+	al_draw_filled_rectangle(x + pad, y + pad, x + TILE_SIZE_PX - pad, y + TILE_SIZE_PX - pad, p->color);
+}
+
 void draw_tile(tile *p) {
+   int x = col2x(p->col);
+   int y = row2y(p->row);
+
+   draw_tilexy(p, x, y);
+}
+
+void draw_piecexy(piece *p, int x, int y) {
 	if (!p)
 		return;
 
-	int x = row2x(p->col);
-	int y = row2y(p->row);
-
-	al_draw_filled_rectangle(x + TILE_PADDING, y + TILE_PADDING, x + TILE_SIZE_PX - TILE_PADDING, y + TILE_SIZE_PX - TILE_PADDING, p->color);
+	for (int i = 0; i < TILES_BY_PIECE; i++) {
+		draw_tilexy(p->tiles[i], x + TILE_SIZE_PX * p->tiles[i]->col, y + TILE_SIZE_PX * p->tiles[i]->row);
+	}
 }
 
 void draw_piece(piece *p) {
@@ -340,7 +378,7 @@ void draw_piece(piece *p) {
 }
 
 void draw_field(game_data *g) {
-	al_draw_rectangle(row2x(0), row2y(0), row2x(FIELD_COLS), row2y(FIELD_ROWS), al_map_rgb_f(0.3, 0.4, 0.8), 4.4);
+	al_draw_rectangle(col2x(0), row2y(0), col2x(FIELD_COLS), row2y(FIELD_ROWS), al_map_rgb_f(0.3, 0.4, 0.8), 4.4);
 
 	for (int i = 0; i < g->field_rows; i++) {
 		for (int j = 0; j < g->field_cols; j++) {
@@ -351,12 +389,24 @@ void draw_field(game_data *g) {
 	}
 }
 
+void draw_next_piece(game_data *g) {
+	int x = col2x(FIELD_COLS) + 100;
+	int y = row2y(0);
+	int w = TILE_SIZE_PX * 6;
+
+	al_draw_rectangle(x, y, x + w, y + w, al_map_rgb_f(0.3, 0.8, 0.8), 4.4);
+	al_draw_text(font, al_map_rgb_f(1, 1, 1), x + w/2, y - 10, ALLEGRO_ALIGN_CENTER, "Proxima");
+
+	draw_piecexy(g->next, x + w/2, y + w/2 - TILE_SIZE_PX);
+}
+
 void draw_screen(game_data *g) {
 	al_clear_to_color(COLOR_BG);
-	al_draw_text(font, al_map_rgb_f(1, 1, 1), SCREEN_W / 2, 10, ALLEGRO_ALIGN_CENTER, "TRETIS"); // TODO: how to center text?
+	al_draw_text(font, al_map_rgb_f(1, 1, 1), SCREEN_W / 2, 10, ALLEGRO_ALIGN_CENTER, "TRETIS");
 
 	draw_piece(g->falling);
 	draw_field(g);
+	draw_next_piece(g);
 
 	al_flip_display();
 }
@@ -410,14 +460,28 @@ void pc_rotate(piece *pc) {
 		pc->tiles[i]->row = TILES_BY_PIECE - pc->tiles[i]->row;
 	}
 
-	// copy back from temp field back to piece
+	// copy back from temp field back to piece. Offset it relative to the
+	// reference (center) tile original position
 	int ref_dcol = pc->tiles[2]->col + col_offset - ref.col;
 	int ref_drow = pc->tiles[2]->row + row_offset - ref.row;
+
+	// Now avoid going beyond field boundaires
+	// TODO
+	int field_offset_col = 0, field_offset_row = 0;
+//	int field_offset_col = pc_min_col(pc) < 0 ? ABS(pc_min_col(pc)) : (
+//			pc_max_col(pc) >= FIELD_COLS ? pc_max_col(pc) - FIELD_COLS : 0
+//	);
+//	int field_offset_row = pc_min_row(pc) < 0 ? ABS(pc_min_row(pc)) : (
+//			pc_max_row(pc) >= FIELD_ROWS ? pc_max_row(pc) - FIELD_ROWS : 0
+//	);
+
+	// translate piece by center offset and field boundaries
 	for (int i = 0; i < TILES_BY_PIECE; i++){
 		tile *t = pc->tiles[i];
-		t->row = t->row + row_offset - ref_drow;
-		t->col = t->col + col_offset - ref_dcol;
+		t->row = t->row + row_offset - ref_drow + field_offset_row;
+		t->col = t->col + col_offset - ref_dcol + field_offset_col;
 	}
+
 }
 
 bool pc_can_fall(game_data *g, piece *falling) {
@@ -487,8 +551,7 @@ bool game_logic(game_data *game) {
 		} else {
 			pc_place(game);
 			disappear_line(game, game->falling);
-			game->falling = pc_create_random();
-
+			grab_next_piece(game);
 		}
 	}
 
