@@ -11,13 +11,14 @@
 #include <allegro5/allegro_audio.h>
 #include <allegro5/allegro_acodec.h>
 
-#define SCREEN_W 640
-#define SCREEN_H 480
+#define SCREEN_W 800
+#define SCREEN_H 600
 
 #define FIELD_ROWS 20
 #define FIELD_COLS 10
 
-#define TILE_SIZE_PX 20
+#define TILE_SIZE_PX 19
+#define TILE_PADDING 1
 
 #define COLOR_BG      al_map_rgb_f(0, 0, 0)
 #define tile_center() (FIELD_COLS / 2)
@@ -300,22 +301,33 @@ void init_objects(game_data *data) {
 	data->speed = INITIAL_SPEED;
 }
 
-int to_scrx(int field_x) {
-	return field_x * TILE_SIZE_PX;
+// calculate field offset
+int field_x(int x) {
+	return x + SCREEN_W / 2 - TILE_SIZE_PX * FIELD_COLS / 2;
+}
+int toy(int y) {
+	return y + SCREEN_H / 2 - TILE_SIZE_PX * FIELD_ROWS / 2;
+}
+//
+
+// conver piece row into coordinate relative to the field top
+int row2x(int field_col) {
+	return field_x(field_col * TILE_SIZE_PX);
 }
 
-int to_scry(int field_y) {
-	return field_y * TILE_SIZE_PX;
+int row2y(int field_row) {
+	return toy(field_row * TILE_SIZE_PX);
 }
+//
 
 void draw_tile(tile *p) {
 	if (!p)
 		return;
 
-	int x = to_scrx(p->col);
-	int y = to_scry(p->row);
+	int x = row2x(p->col);
+	int y = row2y(p->row);
 
-	al_draw_filled_rectangle(x, y, x + TILE_SIZE_PX, y + TILE_SIZE_PX, p->color);
+	al_draw_filled_rectangle(x + TILE_PADDING, y + TILE_PADDING, x + TILE_SIZE_PX - TILE_PADDING, y + TILE_SIZE_PX - TILE_PADDING, p->color);
 }
 
 void draw_piece(piece *p) {
@@ -328,6 +340,8 @@ void draw_piece(piece *p) {
 }
 
 void draw_field(game_data *g) {
+	al_draw_rectangle(row2x(0), row2y(0), row2x(FIELD_COLS), row2y(FIELD_ROWS), al_map_rgb_f(0.3, 0.4, 0.8), 4.4);
+
 	for (int i = 0; i < g->field_rows; i++) {
 		for (int j = 0; j < g->field_cols; j++) {
 			if (g->field[i][j] != NULL) {
@@ -339,7 +353,7 @@ void draw_field(game_data *g) {
 
 void draw_screen(game_data *g) {
 	al_clear_to_color(COLOR_BG);
-	al_draw_text(font, 	al_map_rgb_f(1, 1, 1), SCREEN_W / 2, 0, 0, "GAME!"); // TODO: how to center text?
+	al_draw_text(font, al_map_rgb_f(1, 1, 1), SCREEN_W / 2, 10, ALLEGRO_ALIGN_CENTER, "TRETIS"); // TODO: how to center text?
 
 	draw_piece(g->falling);
 	draw_field(g);
