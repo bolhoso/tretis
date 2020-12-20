@@ -42,7 +42,7 @@
 
 // interval to rate-limit keyboard, following keys enum
 const int KEY_INTERVAL_MS[] = {
-	75, //left right
+	65, //left right
 	50, // down
 	250, // rotate
 	500
