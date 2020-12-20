@@ -1,6 +1,11 @@
+// TODO: bug de peca caindo apertando pra baixo, passa da linha 0
+// TODO: bug de quando rota perto das bordas, ela colide com a parede e fica no ar...
+//   - ao inves de impedir rotacao, tem que mover ela uma casa para o lado
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
+#include <math.h>
+#include <inttypes.h>
 #include <string.h>
 #include <limits.h>
 
@@ -33,6 +38,13 @@
 #define TILES_BY_PIECE 4
 
 #define ABS(x) (x<0?-x:x)
+
+// interval to rate-limit keyboard, following keys enum
+const int KEY_INTERVAL_MS[] = {
+	75, //left right
+	50, // down
+	250 // rotate
+};
 
 typedef struct object {
 	// this is discrete x,y in the field, not in the screen, relative to tile top
@@ -76,6 +88,14 @@ enum direction {
 };
 
 
+enum keys {
+	KEY_LEFT_RIGHT = 0,
+	KEY_DOWN,
+	KEY_UP,
+	KEY_N
+};
+
+
 typedef struct piece {
 	tile *tiles[TILES_BY_PIECE];
 
@@ -90,10 +110,13 @@ typedef struct game_data {
 
 	int field_cols, field_rows;
 
-	int ticks;
+	long ticks;
 
 	long points;
 	int speed;
+
+	// last time key was pressed
+	unsigned long key_timestamp[KEY_N];
 } game_data;
 
 // ===== globals
@@ -107,6 +130,25 @@ unsigned char key[ALLEGRO_KEY_MAX];
 ALLEGRO_COLOR COLORS[PC_N];
 //
 // =====
+
+long t() {
+    struct timespec spec;
+    clock_gettime(CLOCK_MONOTONIC, &spec);
+
+    long ms = lround(spec.tv_nsec / 1.0e6);
+    if (ms > 999) ms = 0;
+    return spec.tv_sec*1000 + ms; // Convert nanoseconds to milliseconds
+}
+
+int allegro_to_key(int keycode) {
+	if (keycode == ALLEGRO_KEY_LEFT || keycode == ALLEGRO_KEY_RIGHT)
+		return KEY_LEFT_RIGHT;
+	if (keycode == ALLEGRO_KEY_UP)
+		return KEY_UP;
+	if (keycode == ALLEGRO_KEY_DOWN)
+		return KEY_DOWN;
+	return -1;
+}
 
 void must_init(bool test) {
 	if (test)
@@ -240,10 +282,6 @@ piece *pc_create_random() {
 	return pc_create(rand() % PC_N, 0, tile_center());
 }
 
-bool pc_can_rotate(game_data *g, piece *p) {
-	return true; // TODO stub can rotate?
-}
-
 // returns the leftmost tile col
 int pc_min_col(piece *p) {
 	int min = 99999;
@@ -326,6 +364,9 @@ void init_objects(game_data *g) {
 
 	g->points = 0;
 	g->speed = INITIAL_SPEED;
+	for (int i = 0; i < KEY_N; i++) {
+		g->key_timestamp[i] = 0;
+	}
 }
 
 // calculate field offset
@@ -530,6 +571,12 @@ bool disappear_line(game_data *game, piece *placed) {
 	return line_removed;
 }
 
+// allow key to be processed if last press was after the key rate
+// limiting interval
+bool should_process_key(game_data *g, int k) {
+	return t() - g->key_timestamp[k] > KEY_INTERVAL_MS[k];
+}
+
 bool game_logic(game_data *game) {
 	if (game->falling == NULL) {
 		exit(1); // should never reach here :/
@@ -537,7 +584,6 @@ bool game_logic(game_data *game) {
 
 	// only move pieces every FPS ticks
 	game->ticks += game->speed;
-
 	bool process_piece_logic = false;
 	if (game->ticks % FPS == 0) {
 		game->ticks = 0;
@@ -546,8 +592,10 @@ bool game_logic(game_data *game) {
 
 	if (process_piece_logic) {
 		// TODO: debug
-		if (pc_can_fall(game, game->falling)) { // TODO: change to can_move_piece
-			pc_move_delta(game->falling, 1, 0);
+		if (pc_can_fall(game, game->falling)) {
+			// don't move down is player is forcing piece down
+			if (should_process_key(game, KEY_DOWN))
+				pc_move_delta(game->falling, 1, 0);
 		} else {
 			pc_place(game);
 			disappear_line(game, game->falling);
@@ -565,27 +613,40 @@ bool process_kbd(game_data *game, bool *done) {
 
 	bool changed_state = false;
 	if (game->falling) {
-		if (key[ALLEGRO_KEY_DOWN] && pc_can_move(game, game->falling, 0, 1)) {
-			changed_state = true;
+		if (should_process_key(game, KEY_DOWN) &&
+				key[ALLEGRO_KEY_DOWN] &&
+				pc_can_move(game, game->falling, 0, 1)) {
 			pc_move_delta(game->falling, 1, 0);
-		}
-		if (key[ALLEGRO_KEY_UP] && pc_can_rotate(game, game->falling)) {
-			pc_rotate(game->falling);
+
 			changed_state = true;
+			game->key_timestamp[KEY_DOWN] = t();
+		}
+		if (should_process_key(game, KEY_UP) &&
+				key[ALLEGRO_KEY_UP]) {
+			pc_rotate(game->falling);
+
+			changed_state = true;
+			game->key_timestamp[KEY_UP] = t();
 		}
 
-		if (key[ALLEGRO_KEY_LEFT] &&
+		if (should_process_key(game, KEY_LEFT_RIGHT) &&
+				key[ALLEGRO_KEY_LEFT] &&
 				pc_min_col(game->falling) > 0 &&
 				pc_can_move(game, game->falling, -1, 0)) {
-			changed_state = true;
 			pc_move_delta(game->falling, 0, -1);
+
+			changed_state = true;
+			game->key_timestamp[KEY_LEFT_RIGHT] = t();
 		}
 
-		if (key[ALLEGRO_KEY_RIGHT] &&
+		if (should_process_key(game, KEY_LEFT_RIGHT) &&
+				key[ALLEGRO_KEY_RIGHT] &&
 				pc_max_col(game->falling) + 1 < game->field_cols &&
 				pc_can_move(game, game->falling, 1, 0)) {
-			changed_state = true;
 			pc_move_delta(game->falling, 0, 1);
+
+			changed_state = true;
+			game->key_timestamp[KEY_LEFT_RIGHT] = t();
 		}
 	}
 
@@ -624,6 +685,11 @@ int main() {
 		case ALLEGRO_EVENT_KEY_UP:
 			// remove flag of key seen
 			key[event.keyboard.keycode] &= KEY_RELEASED;
+
+			// key up, reset timer to process the same key in less than the interval
+			// just to feel natural and avoiding missing keystrokes in between keys intervals
+			int k = allegro_to_key(event.keyboard.keycode);
+			if (k != -1) game_data.key_timestamp[k] = 0;
 			break;
 
 
