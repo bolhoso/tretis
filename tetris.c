@@ -30,7 +30,8 @@
 
 #define FPS 30
 #define GAME_TIMER_SPEED ((float)1/FPS)
-#define INITIAL_SPEED 1;
+#define INITIAL_SPEED 1
+#define OVERRIDE_TICKS -1
 
 #define KEY_SEEN     1
 #define KEY_RELEASED 2
@@ -43,7 +44,8 @@
 const int KEY_INTERVAL_MS[] = {
 	75, //left right
 	50, // down
-	250 // rotate
+	250, // rotate
+	500
 };
 
 typedef struct object {
@@ -92,6 +94,7 @@ enum keys {
 	KEY_LEFT_RIGHT = 0,
 	KEY_DOWN,
 	KEY_UP,
+	KEY_SPACE,
 	KEY_N
 };
 
@@ -582,13 +585,13 @@ bool game_logic(game_data *game) {
 		exit(1); // should never reach here :/
 	}
 
-	// only move pieces every FPS ticks
-	game->ticks += game->speed;
+	// only move pieces every FPS ticks or when to override
 	bool process_piece_logic = false;
-	if (game->ticks % FPS == 0) {
+	if (game->ticks == OVERRIDE_TICKS || game->ticks % FPS == 0) {
 		game->ticks = 0;
 		process_piece_logic = true;
 	}
+	game->ticks += game->speed;
 
 	if (process_piece_logic) {
 		// TODO: debug
@@ -647,6 +650,15 @@ bool process_kbd(game_data *game, bool *done) {
 
 			changed_state = true;
 			game->key_timestamp[KEY_LEFT_RIGHT] = t();
+		}
+
+		if (should_process_key(game, KEY_SPACE) && key[ALLEGRO_KEY_SPACE]) {
+			while (pc_can_move(game, game->falling, 0, 1)) {
+				pc_move_delta(game->falling, 1, 0);
+			}
+			changed_state = true;
+			game->ticks = OVERRIDE_TICKS;
+			game->key_timestamp[KEY_SPACE] = t();
 		}
 	}
 
