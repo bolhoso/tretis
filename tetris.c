@@ -466,7 +466,7 @@ bool pc_can_move(game_data *g, piece *falling, int dcol, int drow) {
 		// place to go is free
 		move_allowed &= g->field[tile->row + drow][tile->col + dcol] == NULL;
 		move_allowed &= tile->col + dcol >= 0 && tile->col + dcol < g->field_cols;
-		move_allowed &= tile->row + drow >= 0;
+		move_allowed &= tile->row + drow >= 0 && tile->row + drow < g->field_rows;
 	}
 
 	return move_allowed;
