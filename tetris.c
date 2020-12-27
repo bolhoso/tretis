@@ -1,4 +1,3 @@
-// TODO: bug de peca caindo apertando pra baixo, passa da linha 0
 // TODO: bug de quando rota perto das bordas, ela colide com a parede e fica no ar...
 //   - ao inves de impedir rotacao, tem que mover ela uma casa para o lado
 #include <stdlib.h>
@@ -206,7 +205,6 @@ void init_allegro() {
 	init_piece_colors();
 }
 
-// TODO: just to refactor and reduce impact...
 tile *create_tile(int row, int col, ALLEGRO_COLOR color) {
 	tile *new = (tile *) malloc(sizeof (tile));
 	new->color = color;
@@ -594,7 +592,6 @@ bool game_logic(game_data *game) {
 	game->ticks += game->speed;
 
 	if (process_piece_logic) {
-		// TODO: debug
 		if (pc_can_fall(game, game->falling)) {
 			// don't move down is player is forcing piece down
 			if (should_process_key(game, KEY_DOWN))
@@ -609,7 +606,6 @@ bool game_logic(game_data *game) {
 	return process_piece_logic;
 }
 
-// TODO: rate limit keyboard
 bool process_kbd(game_data *game, bool *done) {
 	if (key[ALLEGRO_KEY_ESCAPE])
 		*done = true;
@@ -670,6 +666,36 @@ bool process_kbd(game_data *game, bool *done) {
 	return changed_state;
 }
 
+void draw_menu() {
+	al_clear_to_color(COLOR_BG);
+	al_draw_text(font, al_map_rgb_f(1, 1, 1), SCREEN_W / 2, SCREEN_H / 2, ALLEGRO_ALIGN_CENTER, "TRETIS");
+	al_draw_text(font, al_map_rgb_f(1, 1, 1), SCREEN_W / 2, SCREEN_H / 2 + 25, ALLEGRO_ALIGN_CENTER, "Press Enter to Start, ESC to quit");
+	al_flip_display();
+}
+
+bool screen_start_quit() {
+	ALLEGRO_EVENT event;
+	ALLEGRO_KEYBOARD_STATE ks;
+
+	while (1) {
+		al_wait_for_event(queue, &event);
+
+		switch (event.type) {
+		case ALLEGRO_EVENT_TIMER:
+			al_get_keyboard_state(&ks);
+
+			if(al_key_down(&ks, ALLEGRO_KEY_ENTER))
+				return false;
+			if(al_key_down(&ks, ALLEGRO_KEY_ESCAPE))\
+				return true;
+
+			draw_menu();
+		}
+	}
+
+	return true;
+}
+
 int main() {
 	ALLEGRO_EVENT event;
 	game_data game_data;
@@ -679,8 +705,15 @@ int main() {
 
 	bool done = false;
 	bool redraw = true;
-	draw_screen(&game_data);
+
 	al_start_timer(timer);
+
+	done = screen_start_quit();
+
+	if (!done) {
+		draw_screen(&game_data);
+	}
+
 	while (!done) {
 		al_wait_for_event(queue, &event);
 
